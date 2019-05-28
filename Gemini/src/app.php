@@ -15,7 +15,7 @@ $app->register(new IslandoraServiceProvider());
 $app->register(new YamlConfigServiceProvider(__DIR__ . '/../cfg/config.yaml'));
 $app['debug'] = $app['crayfish.debug'];
 $app['gemini.mapper'] = function ($app) {
-    return new UrlMapper($app['db']);
+    return new UrlMapper($app['db'], $app['monolog']);
 };
 $app['gemini.minter'] = function ($app) {
     return new UrlMinter($app['crayfish.fedora_base_url']);

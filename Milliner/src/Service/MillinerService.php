@@ -293,6 +293,8 @@ class MillinerService implements MillinerServiceInterface
      */
     protected function processJsonld(array $jsonld, $drupal_url, $fedora_url)
     {
+$this->log->debug("Looking for @id", ['@id' => $drupal_url]);
+$this->log->debug("Before", $jsonld);
         // Strip out everything other than the resource in question.
         $resource = array_filter(
             $jsonld['@graph'],
@@ -303,7 +305,7 @@ class MillinerService implements MillinerServiceInterface
 
         // Put in an fedora url for the resource.
         $resource[0]['@id'] = $fedora_url;
-
+$this->log->debug("After", $resource);
         return $resource;
     }
 

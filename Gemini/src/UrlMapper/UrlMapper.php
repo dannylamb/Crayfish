@@ -4,6 +4,7 @@ namespace Islandora\Gemini\UrlMapper;
 
 use Doctrine\DBAL\Connection;
 use Doctrine\DBAL\Exception\UniqueConstraintViolationException;
+use \Monolog\Logger;
 
 /**
  * Class UrlMapper
@@ -18,12 +19,18 @@ class UrlMapper implements UrlMapperInterface
     protected $connection;
 
     /**
+     * @var \Monolog\Logger
+     */
+    protected $log;
+
+    /**
      * UrlMapper constructor.
      * @param \Doctrine\DBAL\Connection $connection
      */
-    public function __construct(Connection $connection)
+    public function __construct(Connection $connection, Logger $logger)
     {
         $this->connection = $connection;
+        $this->logger = $logger;
     }
 
     /**
@@ -46,7 +53,6 @@ class UrlMapper implements UrlMapperInterface
         $drupal_uri,
         $fedora_uri
     ) {
-        $this->connection->beginTransaction();
         // Hash incomming URIs
         $fedora_hash = hash('sha512', $fedora_uri);
         $drupal_hash = hash('sha512', $drupal_uri);
@@ -61,23 +67,20 @@ class UrlMapper implements UrlMapperInterface
           'dateUpdated' => $now,
         ];
 
+        $this->logger->debug("Mapping " . $db_data['drupal_uri'] . ' to ' . $db_data['fedora_uri'] . ' for ' . $db_data['uuid']);
+
+        // Try to insert first, and if the record already exists, update it.
         try {
-            // Try to insert first, and if the record already exists, update it.
-            try {
-                $this->connection->insert('Gemini', $db_data);
-                $this->connection->commit();
-                return true;
-            } catch (UniqueConstraintViolationException $e) {
-                // We want to maintain the creation UNIX Timestamp
-                unset($db_data['dateCreated']);
-                unset($db_data['uuid']);
-                $this->connection->update('Gemini', $db_data, ['uuid' => $uuid]);
-                $this->connection->commit();
-                return false;
-            }
-        } catch (\Exception $e) {
-            $this->connection->rollBack();
-            throw $e;
+            $this->connection->insert('Gemini', $db_data);
+            $this->logger->debug("SUCCESSFULLY CREATED ROW"); 
+            return true;
+        } catch (UniqueConstraintViolationException $e) {
+            // We want to maintain the creation UNIX Timestamp
+            unset($db_data['dateCreated']);
+            unset($db_data['uuid']);
+            $updated = $this->connection->update('Gemini', $db_data, ['uuid' => $uuid]);
+            $this->logger->debug("GOT AN UPDATE: $updated rows affected"); 
+            return false;
         }
     }
 
@@ -86,21 +89,12 @@ class UrlMapper implements UrlMapperInterface
      */
     public function deleteUrls($uuid)
     {
-        $this->connection->beginTransaction();
+        $count = $this->connection->delete(
+            'Gemini',
+            ['uuid' => $uuid]
+        );
 
-        try {
-            $count = $this->connection->delete(
-                'Gemini',
-                ['uuid' => $uuid]
-            );
-
-            $this->connection->commit();
-
-            return $count > 0;
-        } catch (\Exception $e) {
-            $this->connection->rollBack();
-            throw $e;
-        }
+        return $count > 0;
     }
 
     /**
